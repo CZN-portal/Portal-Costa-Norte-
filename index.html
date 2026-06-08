@@ -155,12 +155,21 @@ code { background: #f0f2f5; padding: 2px 8px; border-radius: 4px; font-size: 12p
 .btn-copy { background: white; border: 1px solid #dde3e9; color: #374151; font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 6px; cursor: pointer; transition: all 0.15s; }
 .btn-copy:hover { background: #f0f2f5; }
 .btn-copy.ok { background: #dcfce7; border-color: #16a34a; color: #15803d; }
+.btn-excel {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #1a5c38; color: white; border: none;
+  padding: 7px 14px; border-radius: 7px; font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: background 0.2s; white-space: nowrap;
+}
+.btn-excel:hover { background: #2d7a4f; }
+.btn-excel svg { width: 14px; height: 14px; fill: white; }
 
 .empty-state { padding: 52px; text-align: center; color: #9ca3af; }
 .empty-icon { font-size: 40px; margin-bottom: 10px; }
 
 @media(max-width:768px){ .portal-body{ padding:14px; } .tabs-bar{ padding: 16px 14px 0; } }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -266,7 +275,13 @@ code { background: #f0f2f5; padding: 2px 8px; border-radius: 4px; font-size: 12p
       <div class="section-card">
         <div class="section-header">
           <div class="section-title">Órdenes de Compra Activas — En Tránsito</div>
-          <div class="section-count" id="orden-count">0</div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="btn-excel" onclick="descargarExcel('main')">
+              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm-1 7V3.5L18.5 9H13zm-3 5l-2-3h1.5l1.25 2 1.25-2H13l-2 3 2 3h-1.5l-1.25-2-1.25 2H7l2-3zm7 3h-1.5l-1.25-2-1.25 2H12l2-3-2-3h1.5l1.25 2 1.25-2H16l-2 3 2 3z"/></svg>
+              Descargar Excel
+            </button>
+            <div class="section-count" id="orden-count">0</div>
+          </div>
         </div>
         <div id="tabla-ordenes"></div>
       </div>
@@ -301,7 +316,13 @@ code { background: #f0f2f5; padding: 2px 8px; border-radius: 4px; font-size: 12p
       <div class="section-card">
         <div class="section-header">
           <div class="section-title">OC Sin Asociar — Pendientes de Vinculación</div>
-          <div class="section-count orange" id="sa-orden-count">0</div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="btn-excel" onclick="descargarExcel('sinasoc')">
+              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm-1 7V3.5L18.5 9H13zm-3 5l-2-3h1.5l1.25 2 1.25-2H13l-2 3 2 3h-1.5l-1.25-2-1.25 2H7l2-3zm7 3h-1.5l-1.25-2-1.25 2H12l2-3-2-3h1.5l1.25 2 1.25-2H16l-2 3 2 3z"/></svg>
+              Descargar Excel
+            </button>
+            <div class="section-count orange" id="sa-orden-count">0</div>
+          </div>
         </div>
         <div id="tabla-sinasoc"></div>
       </div>
@@ -605,6 +626,52 @@ function copiar(u,p,btn){
   navigator.clipboard.writeText('Usuario: '+u+'\nContraseña: '+p).catch(()=>{});
   btn.textContent='✓ Copiado'; btn.classList.add('ok');
   setTimeout(()=>{ btn.textContent='Copiar'; btn.classList.remove('ok'); },2000);
+}
+
+// ── Descarga Excel ────────────────────────────────────────────────────────────
+function descargarExcel(tipo) {
+  const isAdmin = usuarioActual.rol === 'admin';
+  let wb, fecha = new Date().toLocaleDateString('es-MX');
+
+  if (tipo === 'main') {
+    // Órdenes en tránsito — una fila por línea de detalle
+    const rows = [['Proveedor','OC #','Artículo','Descripción','Fecha Promesa','Sem. Promesa','CEDIS Destino','Moneda','Precio Unitario','Cantidad','Total Línea','Confirmada']];
+    ordenesActuales.forEach(o => {
+      o.lineas.forEach(r => {
+        rows.push([
+          o.proveedor, o.orden, r.articulo, r.descripcion,
+          o.fecha, o.sem_promesa ? 'Sem '+o.sem_promesa : '',
+          o.cedis, r.moneda,
+          r.valor_unitario, r.cantidad,
+          parseFloat((r.valor_unitario * r.cantidad).toFixed(2)),
+          o.confirmada ? 'Confirmada' : 'Pendiente'
+        ]);
+      });
+    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    // Anchos de columna
+    ws['!cols'] = [
+      {wch:34},{wch:10},{wch:12},{wch:38},{wch:14},{wch:13},
+      {wch:22},{wch:8},{wch:16},{wch:10},{wch:16},{wch:12}
+    ];
+    wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Órdenes en Tránsito');
+    const nombre = isAdmin ? `OC_Transito_${fecha}.xlsx` : `OC_Transito_${usuarioActual.proveedor.split(' ')[0]}_${fecha}.xlsx`;
+    XLSX.writeFile(wb, nombre);
+
+  } else {
+    // OC sin asociar
+    const rows = [['Proveedor','OC #','Moneda','Monto OC','Recibida']];
+    saActuales.forEach(o => {
+      rows.push([o.proveedor, o.orden, o.moneda, o.total > 0 ? o.total : '', '✔']);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{wch:34},{wch:10},{wch:8},{wch:18},{wch:10}];
+    wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'OC Sin Asociar');
+    const nombre = isAdmin ? `OC_SinAsociar_${fecha}.xlsx` : `OC_SinAsociar_${usuarioActual.proveedor.split(' ')[0]}_${fecha}.xlsx`;
+    XLSX.writeFile(wb, nombre);
+  }
 }
 
 </script>
